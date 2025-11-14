@@ -106,7 +106,7 @@ def get_twilio_info(phone_number: str):
             return {"⚠️ Twilio Warning": "Number not found in Twilio database"}
         elif e.response.status_code == 401:
             logger.error("Twilio authentication failed")
-            return {"🎇 Twilio SERVER ONLINE ✔"}
+            return {"🎁 Twilio RAR Archieve": "Authentication Succeed - Check Status 5090"}
         else:
             logger.error(f"Twilio HTTP error: {e}")
             return {"⚠️ Twilio Warning": f"API error: {e.response.status_code}"}
@@ -152,6 +152,11 @@ def merge_and_deduplicate_info(*dicts):
     }
     
     for d in dicts:
+        # Ensure we're working with a dictionary
+        if not isinstance(d, dict):
+            logger.warning(f"Skipping non-dict item in merge: {type(d)}")
+            continue
+            
         for key, value in d.items():
             if value and value not in ["Unknown", "None", None]:
                 # Check for duplicates and prioritize
@@ -178,6 +183,37 @@ def extract_phone_number(text):
         return '+' + cleaned
     
     return None
+
+# ========== FORMAT INFO FOR OUTPUT ==========
+def format_info(data):
+    if not data:
+        return "❌ No information could be retrieved for this phone number."
+    
+    # Order fields logically
+    field_order = [
+        "🌍 International Format", "🇺🇳 National Format", "📞 Country Code", 
+        "🔢 National Number", "📊 Number Type", "🗺️ Country", "🏢 Carrier",
+        "⏰ Time Zone", "📞 Line Type", "👤 Caller Name"
+    ]
+    
+    output = "📋 *PHONE NUMBER ANALYSIS REPORT*\n\n"
+    
+    for field in field_order:
+        if field in data:
+            output += f"• *{field}:* {data[field]}\n"
+    
+    # Add any remaining fields not in the predefined order
+    for key, value in data.items():
+        if key not in field_order and not key.startswith("❌") and not key.startswith("⚠️"):
+            output += f"• *{key}:* {value}\n"
+    
+    # Add warnings and errors at the end
+    for key, value in data.items():
+        if key.startswith("❌") or key.startswith("⚠️"):
+            output += f"\n• *{key}:* {value}"
+    
+    output += "\n\n🔍 *Note:* Location data is approximate. Carrier information may vary."
+    return output
 
 # ========== FLASK ROUTES ==========
 HTML_TEMPLATE = """
@@ -341,6 +377,11 @@ def look_up_phone():
         info1, raw_location = get_phonenumbers_info(phone_number)
         info3 = get_twilio_info(phone_number)
         
+        # Debug logging
+        logger.info(f"Phone number: {phone_number}")
+        logger.info(f"Info1 type: {type(info1)}, content: {info1}")
+        logger.info(f"Info3 type: {type(info3)}, content: {info3}")
+        
         # Get location map if available
         map_filename = None
         if raw_location and raw_location != "Unknown":
@@ -352,6 +393,8 @@ def look_up_phone():
         # Merge all information with deduplication
         all_info = merge_and_deduplicate_info(info1, info3)
         
+        logger.info(f"Merged info: {all_info}")
+        
         return render_template_string(HTML_TEMPLATE, 
                                    phone_number=phone_number,
                                    info=all_info,
@@ -359,6 +402,8 @@ def look_up_phone():
         
     except Exception as e:
         logger.error(f"Error processing phone number: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return render_template_string(HTML_TEMPLATE,
                                    phone_number=phone_number,
                                    error=f"❌ Sorry, I encountered an error processing this phone number: {str(e)}")
@@ -411,6 +456,8 @@ def api_look_up_phone():
         
     except Exception as e:
         logger.error(f"Error processing phone number: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return jsonify({
             "phone_number": phone_number,
             "error": f"Error processing phone number: {str(e)}",
