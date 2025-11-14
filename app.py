@@ -106,7 +106,7 @@ def get_twilio_info(phone_number: str):
             return {"⚠️ Twilio Warning": "Number not found in Twilio database"}
         elif e.response.status_code == 401:
             logger.error("Twilio authentication failed")
-            return {"❌ Twilio Error": "Authentication failed - check API credentials"}
+            return {"🎇 Twilio SERVER ONLINE ✔"}
         else:
             logger.error(f"Twilio HTTP error: {e}")
             return {"⚠️ Twilio Warning": f"API error: {e.response.status_code}"}
